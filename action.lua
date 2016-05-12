@@ -1,57 +1,64 @@
---action.lua
---URL and host come out of customurl.txt file
-print("Sending URL")
-print("URL: " .. customurl)
-print("Host: " .. customhost)
-conn = nil
-conn=net.createConnection(net.TCP, 0) 
+GPIO_LED_SENT = 1
 
-conn:on("receive", function(conn, payload) 
--- show a green LED for 3 seconds before shutting down
-    gpio.write(red,gpio.LOW)
-    gpio.write(green,gpio.HIGH)
-    gpio.write(blue,gpio.LOW)    
-    tmr.delay(3000000) 
---Close all LED lights
-    gpio.write(red,gpio.LOW)
-    gpio.write(green,gpio.LOW)
-    gpio.write(blue,gpio.LOW)
--- set GPIO00(3) to LOW linked to CH_PD (will shutdown the module)
-    gpio.write(3, gpio.LOW)
+-- init mqtt client with keepalive timer 120sec
+m = mqtt.Client(node.chipid(), 120, "", "")
 
---If ESP is enabled after 2 seconds that means the button is still pushed!
---in this case, will reset the configuration
-    tmr.alarm(0, 2000, 1, function()
-        print("Button is still pressed.")
-        reset()
-    end)
-     
-end) 
-     
-conn:on("connection", function(conn, payload) 
-     conn:send("GET " .. customurl 
-      .." HTTP/1.1\r\n" 
-      .."Host: " .. customhost .. "\r\n"
-      .."Accept: */*\r\n" 
-      .."User-Agent: Mozilla/4.0 (compatible; esp8266 Lua; Windows NT 5.1)\r\n" 
-      .."\r\n") 
-      print("URL request sent.") 
-end) 
-                                       
-conn:dns(customhost,function(conn,ip) 
-    if (ip) then
-        print("We can connect to " .. ip)
-        conn:connect(80,ip)
-    else
-        reset()
-    end
-end)
+-- setup Last Will and Testament (optional)
+-- Broker will publish a message with qos = 0, retain = 0, data = "offline" 
+-- to topic "/lwt" if client don't send keepalive packet
+m:lwt("/lwt", "offline", 0, 0)
 
-function reset()
-    print("Resetting Wifi..")
-    wifi.sta.disconnect()
-    wifi.sta.config("","")
-    file.remove('customurl.txt')
---all values are deleted, on next button press it will go into configuration mode
-    print("Settings cleared, please restart.")
+function pubFun(topic) 
+	m:publish(topic,"{'message':'Button pressed'}", 0, 0, 
+		function(client) 
+			print("sent")
+			blinkOn(100, 1)
+			tmr.alarm(1, 3000, tmr.ALARM_SINGLE, 
+				function() 
+					print("Going for deep sleep")
+					node.dsleep(0)
+				end)
+		end) 
 end
+
+-- this function is not really implemented so no output
+m:on("connect", 
+	function(client) 
+		print("on connect")
+	end)
+
+m:on("offline", 
+	function(client) 
+		print ("offline") 
+	end)
+
+-- on publish message receive event
+m:on("message", 
+	function(client, topic, data) 
+		print(topic .. ":" ) 
+		if data ~= nil then
+		print(data)
+		end
+	end)
+
+-- for TLS: m:connect("192.168.11.118", secure-port, 1)
+print("About to connect to MQTT server "..mqConfig.hostname.." on port "..mqConfig.port)
+m:connect(mqConfig.hostname, mqConfig.port, 0, 
+	function(client) 
+		print("connected")
+		-- wait half a sec.
+		tmr.alarm(0, 500, tmr.ALARM_SINGLE, 
+			function() 
+				pubFun("/alert/"..node.chipid()) 
+			end)
+--		m:subscribe("/topic",0, 
+--			function(client) 
+--				print("subscribe success") 
+--		end)
+	end, 
+	function(client, reason) 
+		print("failed reason: "..reason) 
+		wifi.sta.disconnect()
+		wifi.sta.config("","")
+		file.remove('customurl.txt')
+end)
