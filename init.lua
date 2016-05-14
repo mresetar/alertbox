@@ -1,5 +1,6 @@
 -- init.lua
-
+-- set pin to high to indicate operation
+gpio.write(1, gpio.HIGH)
 fileToExecute = "boot-alertbox.lua"
 l = file.list()
 fileFound = false

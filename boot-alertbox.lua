@@ -2,7 +2,7 @@
 dofile('blink.lua')
 cnt = 0
 
-mqConfig = {
+mqttConfig = {
   hostname = nil,
   port = nil
 }
@@ -46,15 +46,15 @@ end
 
 -- write new value for pushes
 writePushes(psh)
-
+mqttConfig.pushes = psh
 -- if customurl file is set (exists) then we load the url
 if file_exists("customurl.txt") then 
   print("Custom URL")
   file.open("customurl.txt", "r")
   customurl = file.readline()
   file.close()
-  mqConfig.hostname, mqConfig.port = customurl:match('^([^:]+):(%d+)')
-  print("Will use server: "..mqConfig.hostname..':'..mqConfig.port)
+  mqttConfig.hostname, mqttConfig.port = customurl:match('^([^:]+):(%d+)')
+  print("Will use server: "..mqttConfig.hostname..':'..mqttConfig.port)
   -- try to connect to Wi-Fi ten times
   -- if dont get a valid IP go to Wi-Fi set up
   -- else do main stuff
