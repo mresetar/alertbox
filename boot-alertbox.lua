@@ -19,6 +19,7 @@ function switchToOtaMode()
   blinkOn(1000, 1)
   wifi.sta.disconnect()
   wifi.sta.config("","")
+  file.remove('customurl.txt')
   dofile("setwifi.lua")
 end
 
@@ -69,7 +70,7 @@ if file_exists("customurl.txt") then
           end
       else
           tmr.unregister(1)
-          print("Connected to Wifi")
+          print("Connected to Wi-Fi")
           print(wifi.sta.getip())
           dofile("action.lua")
       end
