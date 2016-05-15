@@ -1,13 +1,13 @@
+-- action.lua
+
+-- Setup mqttConfig object 
 mqttConfig = mqttConfig or {}
---node = node or { chipid = function() return 1234 end}
 -- add some client config for troubleshooting 
----[[
 mqttConfig.client = {}
 mqttConfig.client.chipid = node.chipid()
 --Get current Station configuration
 mqttConfig.client.ssid, _pass_, mqttConfig.client.bssid_set, mqttConfig.client.bssid = wifi.sta.getconfig()
 mqttConfig.client.ip, _nm_, _gw_ = wifi.sta.getip()
---]]
 mqttConfig.keepalive = 10
 mqttConfig.username = ''
 mqttConfig.password = ''
@@ -42,9 +42,12 @@ function publish(topic, message, qos, retain)
 			print("MQTT message has been sent"..message)
 			blinkOn(100, 1)
 			messageSent = true
-			m:close()
 			print("Going for deep sleep in 3 sec.")
-			tmr.alarm(1, 3000, tmr.ALARM_SINGLE, function() node.dsleep(0) end)
+			tmr.alarm(1, 3000, tmr.ALARM_SINGLE, 
+				function()
+					m:close()
+					node.dsleep(0) 
+				end)
 		end) 
 end
 
@@ -52,13 +55,9 @@ function connectToMqtt()
 	m:connect(mqttConfig.hostname, mqttConfig.port, mqttConfig.useSsl, 0,
 		function(client) 
 			print("Connected")
-			-- wait half a sec.
-	--		tmr.alarm(0, 500, tmr.ALARM_SINGLE, 
-	--			function()
 					message = {}
 					message.pushes = mqttConfig.pushes
 					publish(mqttConfig.topic, toJson(message), mqttConfig.qos, mqttConfig.retain) 
-	--			end)
 	--[[
 				m:subscribe("/topic",0, 
 				function(client) 
@@ -68,10 +67,7 @@ function connectToMqtt()
 		end, 
 		function(client, reason) 
 			print("Failed with reason: "..reason) 
-			wifi.sta.disconnect()
-			wifi.sta.config("","")
-			file.remove('customurl.txt')
-			node.dsleep(0)
+			switchToOtaMode()
 	end)
 end
 
@@ -81,12 +77,14 @@ m:on("connect",
 		print("On connect.")
 	end)
 
+-- this is triggered when MQTT not available but also on close(), therfore check if message has been sent
 m:on("offline", 
 	function(client)
 		if not messageSent then
 			if count < 10 then
 	  		print ("(" .. count .. ") MQTT reconnect.")
-				tmr.alarm(1, 1000, 0, function() connectToMqtt() end)
+				if count == 0 then blinkOn(500, 1) end
+				tmr.alarm(0, 2000, 0, function() connectToMqtt() end)
 			else 
 				switchToOtaMode()
 			end
@@ -95,6 +93,10 @@ m:on("offline",
 			print ("Message sent. Going offline")
 		end
 	end)
+
+-- Do the job
+print("About to connect to MQTT server "..mqttConfig.hostname.." port "..mqttConfig.port)
+connectToMqtt()
 
 -- on message receive event
 --[[
@@ -107,5 +109,3 @@ m:on("message",
 	end)
 --]]
 
-print("About to connect to MQTT server "..mqttConfig.hostname.." on port "..mqttConfig.port)
-connectToMqtt()
